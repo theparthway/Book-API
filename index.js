@@ -1,37 +1,48 @@
+require("dotenv").config();
+
 const express = require("express");
+const mongoose = require("mongoose");
 const bodyParser = require("body-parser");
 
-const database = require("./database");
+const database = require("./database/database");
+
+const BookModel = require("./database/books");
+const AuthorModel = require("./database/authors");
+const PublicationModel = require("./database/publications");
 
 const bookman = express();
 
 bookman.use(bodyParser.urlencoded({extended: true}));
 bookman.use(bodyParser.json());
 
+mongoose.connect(process.env.MONGO_URL).then(() => {
+    console.log("connection established");
+});
+
 bookman.get("/", (req, res) => {
     return res.json({message: "Welcome to BookMan!"});
 });
 
-bookman.get("/books", (req, res) => {
-    return res.json({books: database.books});
+bookman.get("/books", async (req, res) => {
+    const books = await BookModel.find();
+
+    return res.json(books);
 });
 
 /*==================================================================================================*/
 
-bookman.get("/book/is=:isbn", (req, res) => {
-    const book = database.books.filter(book => book.isbn === parseInt(req.params.isbn));
+bookman.get("/book/is=:isbn", async (req, res) => {
+    const book = await BookModel.findOne({isbn: parseInt(req.params.isbn)});
 
-    if (book.length === 0) {
-        return res.json({error: `No book found for isbn ${req.params.isbn}`});
-    }
+    if (!book) return res.json({error: `No book found for isbn ${req.params.isbn}`});
 
     return res.json({book: book});
 });
 
 /*==================================================================================================*/
 
-bookman.get("/book/cat=:category", (req, res) => {
-    const book = database.books.filter(book => book.category.includes(req.params.category));
+bookman.get("/book/cat=:category", async (req, res) => {
+    const book = await BookModel.find({category: req.params.category});
 
     if (book.length === 0) return res.json({error: `No book found for category ${req.params.category}`});
 
@@ -40,8 +51,8 @@ bookman.get("/book/cat=:category", (req, res) => {
 
 /*==================================================================================================*/
 
-bookman.get("/book/lan=:language", (req, res) => {
-    const book = database.books.filter(book => book.language === req.params.language);
+bookman.get("/book/lan=:language", async (req, res) => {
+    const book = await BookModel.find({language: req.params.language});
 
     if (book.length === 0) return res.json({error: `No book found for language ${req.params.language}`});
 
@@ -51,24 +62,25 @@ bookman.get("/book/lan=:language", (req, res) => {
 /*==================================================================================================*/
 /*==================================================================================================*/
 
-bookman.get("/authors", (req, res) => {
-    return res.json({authors: database.authors});
+bookman.get("/authors", async (req, res) => {
+    const getAllAuthors = await AuthorModel.find();
+    return res.json(getAllAuthors);
 });
 
 /*==================================================================================================*/
 
-bookman.get("/author/id=:id", (req, res) => {
-    const author = database.authors.filter(author => author.id === parseInt(req.params.id));
+bookman.get("/author/id=:id", async (req, res) => {
+    const author = await AuthorModel.findOne({id: parseInt(req.params.id)});
 
-    if (author.length === 0) return res.json({error: `No author found for id ${req.params.id}`});
+    if (!author) return res.json({error: `No author found for id ${req.params.id}`});
 
     return res.json({author: author});
 });
 
 /*==================================================================================================*/
 
-bookman.get("/author/is=:isbn", (req, res) => {
-    const author = database.authors.filter(author => author.books.includes(parseInt(req.params.isbn)));
+bookman.get("/author/is=:isbn", async (req, res) => {
+    const author = await AuthorModel.find({books: parseInt(req.params.isbn)});
 
     if (author.length === 0) return res.json({eror: `No author found for book isbn ${req.params.isbn}`});
 
@@ -78,24 +90,25 @@ bookman.get("/author/is=:isbn", (req, res) => {
 /*==================================================================================================*/
 /*==================================================================================================*/
 
-bookman.get("/publications", (req, res) => {
-    return res.json({publications: database.publications});
+bookman.get("/publications", async (req, res) => {
+    const getAllPublications = await PublicationModel.find();
+    return res.json(getAllPublications);
 });
 
 /*==================================================================================================*/
 
-bookman.get("/publication/id=:id", (req, res) => {
-    const publication = database.publications.filter(publication => publication.id === parseInt(req.params.id));
+bookman.get("/publication/id=:id", async (req, res) => {
+    const publication = await PublicationModel.findOne({id: parseInt(req.params.id)});
 
-    if (publication.length === 0) return res.json({error: `No publication found for id ${req.params.id}`});
+    if (!publication) return res.json({error: `No publication found for id ${req.params.id}`});
 
     return res.json({publication: publication});
 });
 
 /*==================================================================================================*/
 
-bookman.get("/publication/is=:isbn", (req, res) => {
-    const publication = database.publications.filter(publication => publication.books.includes(parseInt(req.params.isbn)));
+bookman.get("/publication/is=:isbn", async (req, res) => {
+    const publication = await PublicationModel.find({books: req.params.isbn});
 
     if (publication.length === 0) return res.json({error: `No publication found for book isbn ${req.params.isbn}`});
 
@@ -104,92 +117,150 @@ bookman.get("/publication/is=:isbn", (req, res) => {
 
 /*==================================================================================================*/
 
-bookman.post("/book/new", (req, res) => {
-    const newBook = req.body;
-    database.books.push(newBook);
-    return res.json({updatedBooks: database.books});
-});
-
-/*==================================================================================================*/
-
-bookman.post("/author/new", (req, res) => {
-    const newAuthor = req.body;
-    database.authors.push(newAuthor);
-    return res.json({updatedAuthors: database.authors});
-});
-
-/*==================================================================================================*/
-
-bookman.post("/publication/new", (req, res) => {
-    const newPublication = req.body;
-    database.publications.push(newPublication);
-    return res.json({updatedPublications: database.publications});
-});
-
-/*==================================================================================================*/
-
-bookman.put("/publication/update/book/is=:isbn", (req, res) => {
-    database.publications.forEach(publication => {
-        if (req.body.pubId === publication.id) {
-            return publication.books.push(parseInt(req.params.isbn));
-        }
+bookman.post("/book/new", async (req, res) => {
+    const { newBook } = req.body;
+    const addNewBook = BookModel.create(newBook);
+    return res.json({
+        bookAdded: addNewBook,
+        message: "book added"
     });
+});
 
-    database.books.forEach(book => {
-        if (parseInt(req.params.isbn) === book.isbn) {
-            book.publication = req.body.pubId;
-            return;
-        }
+/*==================================================================================================*/
+
+bookman.post("/author/new", async (req, res) => {
+    const { newAuthor } = req.body;
+    const addNewAuthor = AuthorModel.create(newAuthor);
+    return res.json({
+        authorAdded: addNewAuthor,
+        message: "author added"
     });
+});
+
+/*==================================================================================================*/
+
+bookman.post("/publication/new", async (req, res) => {
+    const { newPublication } = req.body;
+    const addNewPublication = PublicationModel.create(newPublication);
+    return res.json({
+        publicationAdded: addNewPublication,
+        message: "publication added"
+    });
+});
+
+/*==================================================================================================*/
+
+bookman.put("/book/title/update/is=:isbn", async (req, res) => {
+    const updatedBook = await BookModel.findOneAndUpdate(
+        {
+            "isbn": parseInt(req.params.isbn)
+        },
+        {
+            "title": req.body.title
+        },
+        {
+            new: true
+        }
+    );
+
+    return res.json({
+        updatedBook: updatedBook
+    });
+})
+
+/*==================================================================================================*/
+
+bookman.put("/book/author/update/is=:isbn", async (req, res) => {
+    const updatedBook = await BookModel.findOneAndUpdate(
+        {
+            "isbn": parseInt(req.params.isbn)
+        },
+        {
+            $addToSet: {
+                authors: parseInt(req.body.newAuthor)
+            }
+        },
+        {
+            new: true
+        }
+    );
+
+    const updatedAuthor = await AuthorModel.findOneAndUpdate(
+        {
+            "id": parseInt(req.body.newAuthor)
+        },
+        {
+            $addToSet: {
+                books: parseInt(req.params.isbn)
+            }
+        },
+        {
+            new: true
+        }
+    );
 
     return res.json(
         {
-            books: database.books,
-            publications: database.publications,
-            message: "Successfully updated publications and books"
+            updatedBook: updatedBook,
+            updatedAuthor: updatedAuthor
+        }
+    )
+})
+
+/*==================================================================================================*/
+
+bookman.put("/publication/update/book/is=:isbn", async (req, res) => {
+
+    const updatedPublication = await PublicationModel.findOneAndUpdate(
+        {
+            "id": parseInt(req.body.pubId)
+        },
+        {
+            $addToSet: {
+                "books": parseInt(req.params.isbn)
+            }
+        },
+        {
+            new: true
+        }
+    );
+
+    const updatedBook = await BookModel.findOneAndUpdate(
+        {
+            "isbn": parseInt(req.params.isbn)
+        },
+        {
+            "publication": req.body.pubId
+        }
+    );
+
+    return res.json(
+        {
+            book: updatedBook,
+            publication: updatedPublication,
+            message: "Updated"
         }
     );
 });
 
 /*==================================================================================================*/
 
-bookman.delete("/book/delete/is=:isbn", (req, res) => {
-    const updatedBooks = database.books.filter(book => book.isbn !== parseInt(req.params.isbn));
+bookman.delete("/book/delete/is=:isbn", async (req, res) => {
+    const updatedBooks = await BookModel.findOneAndDelete(
+        {
+            "isbn": parseInt(req.params.isbn)
+        }
+    );
 
-    database.books = updatedBooks;
-
-    return res.json({books: database.books});
+    return res.json(
+        {
+            deletedBook: updatedBooks
+        }
+    );
 });
 
 /*==================================================================================================*/
 
-bookman.delete("/book/delete/author/is=:isbn/id=:authorId", (req, res) => {
-    database.books.forEach(book => {
-        if (book.isbn === parseInt(req.params.isbn)) {
-            const newAuthorList = book.authors.filter(
-                eachAuthor => eachAuthor !== parseInt(req.params.authorId)
-            );
-            book.authors = newAuthorList;
-            return;
-        }
-    })
-
-    database.authors.forEach(eachAuthor => {
-        if (eachAuthor.id === parseInt(req.params.authorId)) {
-            const newBookList = eachAuthor.books.filter(
-                book => book !== parseInt(req.params.isbn)
-            );
-            eachAuthor.books = newBookList;
-            return;
-        }
-    });
-
-    return res.json({
-        books: database.books,
-        authors: database.authors,
-        message: "Author was deleted"
-    })
-});
 
 bookman.listen(3000, () => {
     console.log("Server running on port 3000");
